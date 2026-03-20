@@ -913,6 +913,16 @@
 
         if (noText) noText.style.display = 'none';
 
+        // IP button event delegation
+        if (tbody) {
+            tbody.onclick = function(e) {
+                const btn = e.target.closest('.ip-view-btn');
+                if (!btn) return;
+                const idx = parseInt(btn.dataset.index);
+                showIpPopup(idx);
+            };
+        }
+
         // Headers
         const headers = ['#', 'Submitted At', ...currentFormFields.map(f => f.label), 'IP Info'];
         thead.innerHTML = `<tr>${headers.map(h => `<th>${escHtml(h)}</th>`).join('')}</tr>`;
@@ -926,7 +936,7 @@
                 return `<td>${escHtml(display)}</td>`;
             });
             const ipBtn = r.ipInfo
-                ? `<td><button class="btn btn-sm btn-secondary" onclick="showIpPopup(${i})">🌍 View</button></td>`
+                ? `<td><button class="btn btn-sm btn-secondary ip-view-btn" data-index="${i}">🌍 View</button></td>`
                 : `<td><span style="color:rgba(255,255,255,0.3);font-size:0.8rem;">N/A</span></td>`;
             return `<tr><td>${i + 1}</td><td>${date}</td>${cells.join('')}${ipBtn}</tr>`;
         }).join('');
