@@ -273,7 +273,46 @@
             case 'file':
                 var uz = document.createElement('div');
                 uz.className = 'file-upload-zone'; uz.id = 'upload-zone-' + field.id;
-                uz.innerHTML = '<p>Click to upload</p><p class="small-text">Max 10MB</p>';
+                var fileInputEl = document.createElement('input');
+                fileInputEl.type = 'file';
+                fileInputEl.id = 'file-input-' + field.id;
+                fileInputEl.accept = 'image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.zip';
+                fileInputEl.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:2;';
+                uz.style.position = 'relative';
+                uz.innerHTML = '<p style="pointer-events:none">📎 Tap to select file</p><p class="small-text" style="pointer-events:none">Max 10MB</p>';
+                uz.appendChild(fileInputEl);
+                fileInputEl.addEventListener('change', function() {
+                    var file = fileInputEl.files[0];
+                    if (!file) return;
+                    if (file.size > 10 * 1024 * 1024) { showToast('File too large. Max 10MB.', 'error'); fileInputEl.value=''; return; }
+                    var pd2 = document.getElementById('upload-preview-' + field.id);
+                    uz.innerHTML = '<p style="pointer-events:none">Uploading...</p><p class="small-text" style="pointer-events:none">Please wait</p>';
+                    uz.style.opacity = '0.6';
+                    var fd = new FormData();
+                    fd.append('file', file);
+                    fd.append('upload_preset', typeof CLOUDINARY_UPLOAD_PRESET !== 'undefined' ? CLOUDINARY_UPLOAD_PRESET : 'Acsmform');
+                    var xhr2 = new XMLHttpRequest();
+                    var cn = typeof CLOUDINARY_CLOUD_NAME !== 'undefined' ? CLOUDINARY_CLOUD_NAME : 'deckxpuqb';
+                    xhr2.open('POST', 'https://api.cloudinary.com/v1_1/' + cn + '/auto/upload', true);
+                    xhr2.upload.onprogress = function(e) { if(e.lengthComputable) uz.querySelector('p').textContent = 'Uploading ' + Math.round(e.loaded/e.total*100) + '%'; };
+                    xhr2.onload = function() {
+                        uz.style.opacity = '1';
+                        if (xhr2.status === 200) {
+                            var info = JSON.parse(xhr2.responseText);
+                            if (!window.formUploadData) window.formUploadData = {};
+                            window.formUploadData[field.id] = { url: info.secure_url, publicId: info.public_id, format: info.format, size: info.bytes, originalFilename: info.original_filename };
+                            uz.innerHTML = '<p style="pointer-events:none;color:#10b981">✅ ' + (info.original_filename||'file') + '.' + info.format + '</p><p class="small-text" style="pointer-events:none">Tap to change</p>';
+                            uz.appendChild(fileInputEl);
+                            if (pd2) {
+                                var isImg = ['jpg','jpeg','png','gif','webp'].includes((info.format||'').toLowerCase());
+                                pd2.innerHTML = isImg ? '<img src="' + info.secure_url + '" style="max-width:100%;max-height:180px;border-radius:8px;margin-top:8px;">' : '';
+                            }
+                            showToast('File uploaded!', 'success');
+                        } else { uz.innerHTML = '<p style="pointer-events:none">📎 Tap to select file</p><p class="small-text" style="pointer-events:none">Max 10MB</p>'; uz.appendChild(fileInputEl); showToast('Upload failed. Try again.', 'error'); }
+                    };
+                    xhr2.onerror = function() { uz.style.opacity='1'; uz.innerHTML='<p style="pointer-events:none">📎 Tap to select file</p><p class="small-text" style="pointer-events:none">Max 10MB</p>'; uz.appendChild(fileInputEl); showToast('Upload failed.', 'error'); };
+                    xhr2.send(fd);
+                });
                 wrapper.appendChild(uz);
                 var pd = document.createElement('div');
                 pd.id = 'upload-preview-' + field.id;
