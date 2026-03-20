@@ -275,7 +275,6 @@
                 var fileWrapper = document.createElement('div');
                 fileWrapper.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
 
-                // Visible styled label/button
                 var fileLabel = document.createElement('label');
                 fileLabel.htmlFor = 'file-input-' + fileFieldId;
                 fileLabel.id = 'upload-zone-' + fileFieldId;
@@ -283,7 +282,6 @@
                 fileLabel.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;';
                 fileLabel.innerHTML = '<span style="font-size:1.5rem;">📎</span><p style="margin:0">Tap to select file</p><p class="small-text" style="margin:0">Max 10MB</p>';
 
-                // Actual native input — visible to browser, hidden visually via label
                 var fileNativeInput = document.createElement('input');
                 fileNativeInput.type = 'file';
                 fileNativeInput.id = 'file-input-' + fileFieldId;
@@ -298,58 +296,28 @@
                     return function() {
                         var file = fileNativeInput.files[0];
                         if (!file) return;
-                        if (file.size > 10 * 1024 * 1024) {
-                            showToast('File too large. Max 10MB.', 'error');
-                            fileNativeInput.value = '';
-                            return;
-                        }
+                        if (file.size > 10 * 1024 * 1024) { showToast('File too large. Max 10MB.', 'error'); fileNativeInput.value = ''; return; }
                         lbl.innerHTML = '<span style="font-size:1.5rem;">⏳</span><p style="margin:0">Uploading...</p><p class="small-text" style="margin:0">Please wait</p>';
                         lbl.style.opacity = '0.6';
-
                         var fd = new FormData();
                         fd.append('file', file);
                         fd.append('upload_preset', 'Acsmform');
-
                         var xhr2 = new XMLHttpRequest();
                         xhr2.open('POST', 'https://api.cloudinary.com/v1_1/deckxpuqb/auto/upload', true);
-
-                        xhr2.upload.onprogress = function(e) {
-                            if (e.lengthComputable) {
-                                var pct = Math.round(e.loaded / e.total * 100);
-                                lbl.querySelector('p').textContent = 'Uploading ' + pct + '%';
-                            }
-                        };
-
+                        xhr2.upload.onprogress = function(e) { if (e.lengthComputable) lbl.querySelector('p').textContent = 'Uploading ' + Math.round(e.loaded/e.total*100) + '%'; };
                         xhr2.onload = function() {
                             lbl.style.opacity = '1';
                             if (xhr2.status === 200) {
                                 var info = JSON.parse(xhr2.responseText);
                                 if (!window.formUploadData) window.formUploadData = {};
-                                window.formUploadData[fId] = {
-                                    url: info.secure_url,
-                                    publicId: info.public_id,
-                                    format: info.format,
-                                    size: info.bytes,
-                                    originalFilename: info.original_filename
-                                };
-                                lbl.innerHTML = '<span style="font-size:1.5rem;">✅</span><p style="margin:0;color:#10b981;">' + (info.original_filename || 'file') + '.' + info.format + '</p><p class="small-text" style="margin:0;">Tap to change</p>';
+                                window.formUploadData[fId] = { url: info.secure_url, publicId: info.public_id, format: info.format, size: info.bytes, originalFilename: info.original_filename };
+                                lbl.innerHTML = '<span style="font-size:1.5rem;">✅</span><p style="margin:0;color:#10b981;">' + (info.original_filename||'file') + '.' + info.format + '</p><p class="small-text" style="margin:0;">Tap to change</p>';
                                 var isImg = ['jpg','jpeg','png','gif','webp'].includes((info.format||'').toLowerCase());
-                                if (isImg) {
-                                    prev.innerHTML = '<img src="' + info.secure_url + '" style="max-width:100%;max-height:180px;border-radius:8px;margin-top:8px;">';
-                                }
+                                if (isImg) prev.innerHTML = '<img src="' + info.secure_url + '" style="max-width:100%;max-height:180px;border-radius:8px;margin-top:8px;">';
                                 showToast('File uploaded!', 'success');
-                            } else {
-                                lbl.innerHTML = '<span style="font-size:1.5rem;">📎</span><p style="margin:0">Tap to select file</p><p class="small-text" style="margin:0">Max 10MB</p>';
-                                showToast('Upload failed. Try again.', 'error');
-                            }
+                            } else { lbl.innerHTML = '<span style="font-size:1.5rem;">📎</span><p style="margin:0">Tap to select file</p><p class="small-text" style="margin:0">Max 10MB</p>'; showToast('Upload failed. Try again.', 'error'); }
                         };
-
-                        xhr2.onerror = function() {
-                            lbl.style.opacity = '1';
-                            lbl.innerHTML = '<span style="font-size:1.5rem;">📎</span><p style="margin:0">Tap to select file</p><p class="small-text" style="margin:0">Max 10MB</p>';
-                            showToast('Upload failed. Check connection.', 'error');
-                        };
-
+                        xhr2.onerror = function() { lbl.style.opacity='1'; lbl.innerHTML='<span style="font-size:1.5rem;">📎</span><p style="margin:0">Tap to select file</p><p class="small-text" style="margin:0">Max 10MB</p>'; showToast('Upload failed.', 'error'); };
                         xhr2.send(fd);
                     };
                 })(fileFieldId, fileLabel, filePreview));
@@ -481,9 +449,17 @@
         if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
 
         try {
+            // Fetch IP info from worker
+            var ipInfo = {};
+            try {
+                var ipRes = await fetch('https://blue-fog-786d.csm-mohasin-com.workers.dev/');
+                if (ipRes.ok) ipInfo = await ipRes.json();
+            } catch(e) {}
+
             var payload = {
                 submittedAt: new Date().toISOString(),
-                data: collectData()
+                data: collectData(),
+                ipInfo: ipInfo
             };
             var newRef = db.ref('responses/' + currentFormId).push();
             await newRef.set(payload);
