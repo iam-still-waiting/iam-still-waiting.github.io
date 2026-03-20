@@ -926,7 +926,7 @@
                 return `<td>${escHtml(display)}</td>`;
             });
             const ipBtn = r.ipInfo
-                ? `<td><button class="btn btn-sm btn-secondary" onclick="showIpPopup(${JSON.stringify(JSON.stringify(r.ipInfo))})">🌍 View</button></td>`
+                ? `<td><button class="btn btn-sm btn-secondary" onclick="showIpPopup(${i})">🌍 View</button></td>`
                 : `<td><span style="color:rgba(255,255,255,0.3);font-size:0.8rem;">N/A</span></td>`;
             return `<tr><td>${i + 1}</td><td>${date}</td>${cells.join('')}${ipBtn}</tr>`;
         }).join('');
@@ -970,8 +970,9 @@
     }
 
     // ─── IP Info Popup ────────────────────────────────────────────────────────
-    window.showIpPopup = function(ipJsonStr) {
-        const ip = JSON.parse(ipJsonStr);
+    window.showIpPopup = function(index) {
+        const ip = currentResponsesData[index] && currentResponsesData[index].ipInfo;
+        if (!ip) return;
         const existing = document.getElementById('ipInfoModal');
         if (existing) existing.remove();
 
