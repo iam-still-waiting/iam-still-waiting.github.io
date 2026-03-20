@@ -133,6 +133,7 @@
     function renderChart(allResponses) {
         const canvas = document.getElementById('responsesChart');
         if (!canvas) return;
+        if (typeof Chart === 'undefined') return;
 
         // Build last 7 days data
         const days = [];
@@ -141,18 +142,21 @@
             const d = new Date();
             d.setDate(d.getDate() - i);
             const dateStr = d.toISOString().slice(0, 10);
-            days.push(dateStr.slice(5)); // MM-DD
+            const label = (d.getMonth()+1) + '/' + d.getDate();
+            days.push(label);
 
             let count = 0;
-            Object.values(allResponses).forEach(formResponses => {
-                Object.values(formResponses).forEach(r => {
-                    if (r.submittedAt && r.submittedAt.startsWith(dateStr)) count++;
+            try {
+                Object.values(allResponses || {}).forEach(formResponses => {
+                    Object.values(formResponses || {}).forEach(r => {
+                        if (r && r.submittedAt && r.submittedAt.startsWith(dateStr)) count++;
+                    });
                 });
-            });
+            } catch(e) {}
             counts.push(count);
         }
 
-        if (chartInstance) chartInstance.destroy();
+        if (chartInstance) { try { chartInstance.destroy(); } catch(e) {} }
 
         chartInstance = new Chart(canvas, {
             type: 'line',
