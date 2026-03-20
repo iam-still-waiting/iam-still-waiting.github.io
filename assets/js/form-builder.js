@@ -279,7 +279,13 @@
         if (!form) return;
 
         editingFormId = formId;
-        builderFields = JSON.parse(JSON.stringify(form.fields || []));
+        // Firebase stores arrays as objects — convert back to array
+        const rawFields = form.fields || [];
+        if (Array.isArray(rawFields)) {
+            builderFields = JSON.parse(JSON.stringify(rawFields));
+        } else {
+            builderFields = Object.values(rawFields);
+        }
         selectedFieldId = null;
 
         document.getElementById('builderTitle').textContent = 'Edit Form';
@@ -294,12 +300,64 @@
     // Palette drag-and-drop
     function setupPalette() {
         document.querySelectorAll('.palette-field').forEach(item => {
+            // Click always works (desktop + mobile)
             item.addEventListener('click', () => addField(item.dataset.type));
+
+            // Desktop drag
             item.addEventListener('dragstart', (e) => {
                 e.dataTransfer.setData('fieldType', item.dataset.type);
                 item.classList.add('dragging');
             });
             item.addEventListener('dragend', () => item.classList.remove('dragging'));
+
+            // Mobile touch drag
+            let touchDragging = false;
+            let touchClone = null;
+
+            item.addEventListener('touchstart', (e) => {
+                touchDragging = false;
+            }, { passive: true });
+
+            item.addEventListener('touchmove', (e) => {
+                touchDragging = true;
+                e.preventDefault();
+                const touch = e.touches[0];
+
+                if (!touchClone) {
+                    touchClone = item.cloneNode(true);
+                    touchClone.style.cssText = 'position:fixed;opacity:0.8;pointer-events:none;z-index:9999;background:rgba(124,58,237,0.3);border:1px solid #7c3aed;border-radius:8px;padding:0.5rem 1rem;font-size:0.85rem;color:white;transform:scale(1.05);';
+                    document.body.appendChild(touchClone);
+                }
+
+                touchClone.style.left = (touch.clientX - 60) + 'px';
+                touchClone.style.top = (touch.clientY - 20) + 'px';
+
+                const canvas = document.getElementById('builderFields');
+                const rect = canvas ? canvas.getBoundingClientRect() : null;
+                if (rect && touch.clientX >= rect.left && touch.clientX <= rect.right &&
+                    touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+                    canvas.classList.add('drag-over');
+                } else if (canvas) {
+                    canvas.classList.remove('drag-over');
+                }
+            }, { passive: false });
+
+            item.addEventListener('touchend', (e) => {
+                if (touchClone) { touchClone.remove(); touchClone = null; }
+                const canvas = document.getElementById('builderFields');
+                if (canvas) canvas.classList.remove('drag-over');
+
+                if (!touchDragging) return;
+
+                const touch = e.changedTouches[0];
+                if (!canvas) return;
+                const rect = canvas.getBoundingClientRect();
+                if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
+                    touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+                    addField(item.dataset.type);
+                }
+                touchDragging = false;
+            });
         });
     }
 
@@ -360,18 +418,20 @@
         const empty = document.getElementById('builderEmpty');
         if (!container) return;
 
-        // Remove existing field items (keep empty placeholder)
+        // Destroy sortable before DOM change
+        destroySortable();
+
+        // Remove existing field items only
         container.querySelectorAll('.builder-field-item').forEach(el => el.remove());
 
         if (builderFields.length === 0) {
             if (empty) empty.style.display = 'flex';
-            destroySortable();
             return;
         }
 
         if (empty) empty.style.display = 'none';
 
-        builderFields.forEach((field, index) => {
+        builderFields.forEach((field) => {
             const item = document.createElement('div');
             item.className = `builder-field-item ${selectedFieldId === field.id ? 'selected' : ''}`;
             item.dataset.id = field.id;
@@ -389,10 +449,10 @@
                     <span class="field-item-label">${escHtml(field.label)}${field.required ? ' <span class="required-asterisk">*</span>' : ''}</span>
                 </div>
                 <div class="field-item-actions">
-                    <button class="btn-icon-sm" onclick="duplicateField('${field.id}')" title="Duplicate">
+                    <button class="btn-icon-sm" onclick="event.stopPropagation();duplicateField('${field.id}')" title="Duplicate">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                     </button>
-                    <button class="btn-icon-sm btn-danger-icon" onclick="removeField('${field.id}')" title="Delete">
+                    <button class="btn-icon-sm btn-danger-icon" onclick="event.stopPropagation();removeField('${field.id}')" title="Delete">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
                     </button>
                 </div>
@@ -401,6 +461,7 @@
             container.appendChild(item);
         });
 
+        // Init sortable after all items added
         initSortable();
     }
 
@@ -412,10 +473,40 @@
         sortableInstance = Sortable.create(container, {
             animation: 150,
             handle: '.field-item-drag',
-            filter: '.builder-empty',
+            draggable: '.builder-field-item',
             onEnd: (evt) => {
+                if (evt.oldIndex === evt.newIndex) return;
                 const moved = builderFields.splice(evt.oldIndex, 1)[0];
                 builderFields.splice(evt.newIndex, 0, moved);
+                // Re-render to sync state without re-init sortable
+                container.querySelectorAll('.builder-field-item').forEach(el => el.remove());
+                builderFields.forEach((field) => {
+                    const item = document.createElement('div');
+                    item.className = `builder-field-item ${selectedFieldId === field.id ? 'selected' : ''}`;
+                    item.dataset.id = field.id;
+                    item.innerHTML = `
+                        <div class="field-item-drag">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/>
+                                <circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/>
+                                <circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/>
+                            </svg>
+                        </div>
+                        <div class="field-item-content" onclick="selectBuilderField('${field.id}')">
+                            <span class="field-item-type">${getTypeIcon(field.type)} ${getTypeName(field.type)}</span>
+                            <span class="field-item-label">${escHtml(field.label)}${field.required ? ' <span class="required-asterisk">*</span>' : ''}</span>
+                        </div>
+                        <div class="field-item-actions">
+                            <button class="btn-icon-sm" onclick="event.stopPropagation();duplicateField('${field.id}')" title="Duplicate">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                            <button class="btn-icon-sm btn-danger-icon" onclick="event.stopPropagation();removeField('${field.id}')" title="Delete">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
+                            </button>
+                        </div>
+                    `;
+                    container.appendChild(item);
+                });
             }
         });
     }
@@ -536,13 +627,22 @@
         }
 
         const saveBtn = document.getElementById('saveFormBtn');
+
+        // Convert builderFields to plain array (ensure no prototype issues)
+        const fieldsToSave = JSON.parse(JSON.stringify(builderFields));
+
+        if (fieldsToSave.length === 0) {
+            showToast('Please add at least one field', 'error');
+            return;
+        }
+
         setButtonLoading(saveBtn, true);
 
         try {
             const formData = {
                 title,
                 description,
-                fields: builderFields,
+                fields: fieldsToSave,
                 active: true,
                 updatedAt: getTimestamp()
             };
