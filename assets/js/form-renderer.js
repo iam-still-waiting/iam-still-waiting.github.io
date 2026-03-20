@@ -466,6 +466,27 @@
 
             try { localStorage.removeItem(draftKey); } catch(e) {}
 
+            // Send EmailJS notification
+            try {
+                if (window.emailjs) {
+                    var formData = collectData();
+                    var dataLines = Object.entries(formData).map(function(entry) {
+                        return entry[0] + ': ' + (Array.isArray(entry[1]) ? entry[1].join(', ') : entry[1]);
+                    }).join('\n');
+
+                    var ipLine = ipInfo && ipInfo.ip
+                        ? '\n\nIP: ' + ipInfo.ip + ' | ' + (ipInfo.city || '') + ', ' + (ipInfo.country || '') + ' | ' + (ipInfo.org || '')
+                        : '';
+
+                    emailjs.send('service_irwqywo', 'template_0tulqea', {
+                        form_title: currentForm.title || 'Untitled Form',
+                        message: dataLines + ipLine,
+                        submitted_at: new Date().toLocaleString(),
+                        form_id: currentFormId
+                    });
+                }
+            } catch(e) { console.warn('EmailJS error:', e); }
+
             showState('success');
             fireConfetti();
             showToast('Submitted successfully!', 'success');
