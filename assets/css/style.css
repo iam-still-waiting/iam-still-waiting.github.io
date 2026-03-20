@@ -1345,6 +1345,12 @@ input, textarea, select {
     padding: 1.5rem;
 }
 
+.chart-card canvas {
+    display: block;
+    width: 100% !important;
+    height: 280px !important;
+}
+
 .card-title {
     font-size: 1rem;
     font-weight: 600;
