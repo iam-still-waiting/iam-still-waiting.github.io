@@ -480,8 +480,12 @@
 
                     emailjs.send('service_irwqywo', 'template_0tulqea', {
                         form_title: currentForm.title || 'Untitled Form',
+                        title: currentForm.title || 'Untitled Form',
+                        response_data: dataLines + ipLine,
                         message: dataLines + ipLine,
                         submitted_at: new Date().toLocaleString(),
+                        name: 'FormVault',
+                        email: 'noreply@formvault.com',
                         form_id: currentFormId
                     });
                 }
